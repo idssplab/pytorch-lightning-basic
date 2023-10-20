@@ -4,3 +4,4 @@ logs
 CIFAR10
 MNIST
 .DS_Store
+.vscode
