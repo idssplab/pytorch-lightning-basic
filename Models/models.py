@@ -55,7 +55,6 @@ class LitModel(L.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
-
 class LitResnet(L.LightningModule):
     def __init__(self, in_channels, num_classes, lr=0.05):
         super().__init__()
@@ -63,14 +62,19 @@ class LitResnet(L.LightningModule):
         self.save_hyperparameters()
         self.num_classes = num_classes
         self.in_channels = in_channels
+        self.lr = lr
 
         model = torchvision.models.resnet18(weights=None, num_classes=num_classes)
         model.conv1 = nn.Conv2d(in_channels, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-        model.maxpool = nn.Identity()
+        model = nn.Sequential(*list(model.children())[:-2])
+        self.fc = nn.Linear(512, num_classes)
+        # model.maxpool = nn.Identity()
         self.model = model
 
     def forward(self, x):
         out = self.model(x)
+        out = out.mean([2, 3])
+        out = self.fc(out)
         return F.log_softmax(out, dim=1)
 
     def training_step(self, batch, batch_idx):
@@ -100,11 +104,15 @@ class LitResnet(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
             self.parameters(),
-            lr=self.hparams.lr,
+            lr=self.lr,
             momentum=0.9,
             weight_decay=5e-4,
         )
         steps_per_epoch = 45000
+
+        if not isinstance(self.trainer.max_epochs, int):
+            raise ValueError
+
         scheduler_dict = {
             "scheduler": OneCycleLR(
                 optimizer,
